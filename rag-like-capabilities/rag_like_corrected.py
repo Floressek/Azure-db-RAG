@@ -32,6 +32,10 @@ EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
 
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+"""
+This code here is a demo of how to use RAG-like capabilities to perform semantic search and generate responses based on data from DB.
+Based on ceratain changes it should perform better than the previous code because it uses indexing and search capabilities of MongoDB.
+"""
 
 def log_time(operation_name, start_time, end_time):
     duration = end_time - start_time
@@ -100,10 +104,23 @@ def insert_documents(collection, documents):
 def vector_search(collection, query_vector, top_k=5):
     start_time = time.time()
     try:
-        documents = list(collection.find({}))
-        similarities = cosine_similarity([query_vector], [doc['vector'] for doc in documents])[0]
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
-        results = [(documents[i], similarities[i]) for i in top_indices]
+        results = list(collection.aggregate([
+            {
+                "$search": {
+                    "cosmosSearch": {
+                        "vector": query_vector,
+                        "path": "vector",
+                        "k": top_k
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "content": 1,
+                    "score": { "$meta": "searchScore" }
+                }
+            }
+        ]))
         return results
     except Exception as e:
         print(f"An error occurred during vector search: {e}")
@@ -116,15 +133,26 @@ def vector_search(collection, query_vector, top_k=5):
 def semantic_search(collection, query_text, top_k=5):
     start_time = time.time()
     try:
-        words = query_text.lower().split()
-        results = []
-        for doc in collection.find():
-            content = doc['content'].lower()
-            score = sum(word in content for word in words)
-            if score > 0:
-                results.append((doc, score))
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:top_k]
+        results = list(collection.aggregate([
+            {
+                "$search": {
+                    "text": {
+                        "query": query_text,
+                        "path": "content"
+                    }
+                }
+            },
+            {
+                "$limit": top_k
+            },
+            {
+                "$project": {
+                    "content": 1,
+                    "score": { "$meta": "searchScore" }
+                }
+            }
+        ]))
+        return results
     except Exception as e:
         print(f"An error occurred during semantic search: {e}")
         return []
@@ -138,16 +166,15 @@ def get_openai_response(query, search_results):
 
     # Prepare the prompt
     prompt = f"Query: {query}\n\nSearch Results:\n"
-    for doc, score in search_results:
-        prompt += f"- {doc['content'][:400]}... (Score: {score})\n"
+    for doc in search_results:
+        prompt += f"- {doc['content'][:400]}... (Score: {doc['score']})\n"
     prompt += "\nBased on the query and search results, please provide a coherent and relevant response:"
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system",
-                 "content": "You are a helpful assistant that provides coherent responses based on given search results."},
+                {"role": "system", "content": "You are a helpful assistant that provides coherent responses based on given search results."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -156,16 +183,18 @@ def get_openai_response(query, search_results):
         print(f"An error occurred while getting OpenAI response: {e}")
         return None
 
+def generate_query_vector(query_text):
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.embeddings.create(input=query_text, model="text-embedding-ada-002")
+    return response.data[0].embedding
 
 def print_menu():
     print("\n--- Menu ---")
-    print("1. Load embeddings and insert documents")
-    print("2. Perform vector search")
-    print("3. Perform semantic search")
-    print("4. Get OpenAI response based on search results")
-    print("5. Exit")
-    return input("Enter your choice (1-5): ")
-
+    print("1. Perform vector search")
+    print("2. Perform semantic search")
+    print("3. Get OpenAI response based on search results")
+    print("4. Exit")
+    return input("Enter your choice (1-4): ")
 
 def main():
     client = connect_to_cosmosdb(COSMOSDB_CONNECTION_STRING)
@@ -176,51 +205,36 @@ def main():
     if collection is None:
         return
 
-    embeddings_data = None
-
     while True:
         choice = print_menu()
 
         if choice == '1':
-            embeddings_data = load_embeddings(EMBEDDINGS_FILE)
-            if embeddings_data:
-                documents = [
-                    {"content": page[f"Page {i + 1}"], "vector": vector}
-                    for i, (page, vector) in enumerate(zip(embeddings_data["pages"], embeddings_data["vectors"]))
-                ]
-                # Insert the documents into the collection
-                # insert_documents(collection, documents)
+            query_text = input("Enter your search query: ")
+            query_vector = generate_query_vector(query_text)
+            results = vector_search(collection, query_vector)
+            for doc in results:
+                print(f"Content: {doc['content'][:500]}..., Score: {doc['score']}")
         elif choice == '2':
-            if embeddings_data:
-                query_vector = embeddings_data["vectors"][0]  # Using the first vector as an example
-                print(f"Using query vector: {query_vector[:5]}...")  # Print first 5 elements
-                results = vector_search(collection, query_vector)
-                for doc, score in results:
-                    print(f"Content: {doc['content'][:500]}..., Score: {score}")
-            else:
-                print("Please load embeddings first (option 1)")
+            query_text = input("Enter your search query: ")
+            results = semantic_search(collection, query_text)
+            for doc in results:
+                print(f"Content: {doc['content'][:500]}..., Score: {doc['score']}")
         elif choice == '3':
             query_text = input("Enter your search query: ")
             results = semantic_search(collection, query_text)
-            for doc, score in results:
-                print(f"Content: {doc['content'][:500]}..., Score: {score}")
-        elif choice == '4':
-            query_text = input("Enter your search query: ")
-            results = semantic_search(collection, query_text)
-            for doc, score in results:
-                print(f"Content: {doc['content'][:500]}..., Score: {score}")
+            for doc in results:
+                print(f"Content: {doc['content'][:500]}..., Score: {doc['score']}")
 
             openai_response = get_openai_response(query_text, results)
             if openai_response:
                 print("\nOpenAI Response:")
                 print(openai_response)
-        elif choice == '5':
+        elif choice == '4':
             break
         else:
             print("Invalid choice. Please try again.")
 
     client.close()
-
 
 if __name__ == "__main__":
     main()

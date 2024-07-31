@@ -39,7 +39,7 @@ class MongoDBApp:
         connect_button.grid(row=2, column=0, columnspan=2, pady=5)
 
         # New Collection frame
-        new_collection_frame = ttk.LabelFrame(self.root, text="Create New Collection")
+        new_collection_frame = ttk.LabelFrame(self.root, text="Create/Delete Collection")
         new_collection_frame.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
         ttk.Label(new_collection_frame, text="New Collection Name:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
@@ -48,6 +48,9 @@ class MongoDBApp:
 
         create_collection_button = ttk.Button(new_collection_frame, text="Create Collection", command=self.create_collection)
         create_collection_button.grid(row=1, column=0, columnspan=2, pady=5)
+
+        delete_collection_button = ttk.Button(new_collection_frame, text="Delete Collection", command=self.delete_collection)
+        delete_collection_button.grid(row=2, column=0, columnspan=2, pady=5)
 
         # CRUD operations frame
         crud_frame = ttk.LabelFrame(self.root, text="CRUD Operations")
@@ -125,6 +128,20 @@ class MongoDBApp:
         except Exception as e:
             self.log(f"Failed to create collection: {e}")
             messagebox.showerror("Error", f"Failed to create collection: {e}")
+
+    def delete_collection(self):
+        collection_name = self.new_collection_name_entry.get()
+        if not collection_name:
+            messagebox.showerror("Error", "Please enter a collection name.")
+            return
+
+        try:
+            self.db.drop_collection(collection_name)
+            self.log(f"Collection '{collection_name}' deleted successfully.")
+            messagebox.showinfo("Success", f"Collection '{collection_name}' deleted successfully.")
+        except Exception as e:
+            self.log(f"Failed to delete collection: {e}")
+            messagebox.showerror("Error", f"Failed to delete collection: {e}")
 
     def insert_document(self):
         document_str = self.document_entry.get()
