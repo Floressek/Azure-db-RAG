@@ -188,7 +188,8 @@ def main():
                     {"content": page[f"Page {i + 1}"], "vector": vector}
                     for i, (page, vector) in enumerate(zip(embeddings_data["pages"], embeddings_data["vectors"]))
                 ]
-                insert_documents(collection, documents)
+                # Insert the documents into the collection
+                # insert_documents(collection, documents)
         elif choice == '2':
             if embeddings_data:
                 query_vector = embeddings_data["vectors"][0]  # Using the first vector as an example
