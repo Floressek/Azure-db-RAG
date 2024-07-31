@@ -176,6 +176,7 @@ def main():
     if collection is None:
         return
 
+
     embeddings_data = None
 
     while True:
