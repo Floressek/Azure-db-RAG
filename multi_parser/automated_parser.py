@@ -18,6 +18,7 @@ def parse_pptx(file_path):
     for i, slide in enumerate(presentation.slides, 1):
         slide_content = []
         for shape in slide.shapes:
+            # If the slide has a text attribute, it will be parsed
             if hasattr(shape, 'text'):
                 slide_content.append(shape.text)
         slides.append({f"Slide {i}": slide_content})
@@ -39,6 +40,7 @@ def parse_pdf(file_path):
 
 
 def parse_xml(file_path):
+    # This function converts an XML file to a dictionary
     tree = ET.parse(file_path)
     root = tree.getroot()
 
@@ -69,6 +71,18 @@ def parse_excel(file_path):
     for sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
         data = []
+        # Current setup only parses the content of the cell and not:
+        # - Coordinate: The cell's address (e.g., 'A1').
+        # - Row: The row number of the cell.
+        # - Column: The column number of the cell.
+        # - Data Type: The type of data stored in the cell (e.g., string, number, formula).
+        # - Style: The style applied to the cell (e.g., font, fill, border).
+        # - Formula: If the cell contains a formula, the formula itself.
+        # - Hyperlink: If the cell contains a hyperlink, the hyperlink itself.
+        # - Comment: If the cell contains a comment, the comment itself.
+        # - Number Format: The number format applied to the cell (e.g., currency, date).
+        # - Protection: Information about cell protection (e.g., locked, hidden).
+        # If this kind of data is required turn values_only to False
         for row in sheet.iter_rows(values_only=True):
             data.append(list(row))
         sheets[sheet_name] = data
@@ -76,6 +90,7 @@ def parse_excel(file_path):
 
 
 def parse_csv(file_path):
+    # Current parser works on the assumption that we re dealing with polish signs thus utf-8
     with open(file_path, 'r', encoding='utf-8') as file:
         reader = csv.reader(file)
         data = list(reader)
@@ -107,6 +122,7 @@ def parse_file(file_path):
     _, file_extension = os.path.splitext(file_path)
     file_extension = file_extension.lower()
 
+    # Types of supported files in our parser
     parsers = {
         '.pptx': parse_pptx,
         '.doc': parse_doc,
@@ -127,12 +143,34 @@ def parse_file(file_path):
         raise ValueError(f"Unsupported file format: {file_extension}")
 
 
+# Version without creating separate files in output folder
+# def process_folder(input_folder, output_folder):
+#     for root, dirs, files in os.walk(input_folder):
+#         for file in files:
+#             input_file_path = os.path.join(root, file)
+#             relative_path = os.path.relpath(input_file_path, input_folder)
+#             output_file_path = os.path.join(output_folder, relative_path)
+#             output_file_path = os.path.splitext(output_file_path)[0] + '.json'
+#
+#             os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+#
+#             try:
+#                 parsed_content = parse_file(input_file_path)
+#                 with open(output_file_path, 'w', encoding='utf-8') as f:
+#                     json.dump(parsed_content, f, ensure_ascii=False, indent=2)
+#                 print(f"Processed: {input_file_path} -> {output_file_path}")
+#             except Exception as e:
+#                 print(f"Error processing {input_file_path}: {str(e)}")
+
+
 def process_folder(input_folder, output_folder):
     for root, dirs, files in os.walk(input_folder):
         for file in files:
             input_file_path = os.path.join(root, file)
             relative_path = os.path.relpath(input_file_path, input_folder)
-            output_file_path = os.path.join(output_folder, relative_path)
+            file_extension = os.path.splitext(file)[1].lower()
+            extension_folder = os.path.join(output_folder, file_extension.lstrip('.'))
+            output_file_path = os.path.join(extension_folder, relative_path)
             output_file_path = os.path.splitext(output_file_path)[0] + '.json'
 
             os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
@@ -147,7 +185,8 @@ def process_folder(input_folder, output_folder):
 
 
 def main():
-    base_folder = r"C:\Users\szyme\test_pw\to_be_parsed"
+    # Input folder should contain files to be parsed
+    base_folder = r"C:\Users\szyme\to_be_parsed"
     input_folder = os.path.join(base_folder, "input")
     output_folder = os.path.join(base_folder, "output")
 
