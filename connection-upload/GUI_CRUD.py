@@ -11,6 +11,7 @@ import os
 dotenv.load_dotenv()
 COSMOSDB_CONNECTION_STRING = os.getenv("COSMOSDB_CONNECTION_STRING")
 
+
 class MongoDBApp:
     def __init__(self, root):
         self.root = root
@@ -46,10 +47,12 @@ class MongoDBApp:
         self.new_collection_name_entry = ttk.Entry(new_collection_frame)
         self.new_collection_name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        create_collection_button = ttk.Button(new_collection_frame, text="Create Collection", command=self.create_collection)
+        create_collection_button = ttk.Button(new_collection_frame, text="Create Collection",
+                                              command=self.create_collection)
         create_collection_button.grid(row=1, column=0, columnspan=2, pady=5)
 
-        delete_collection_button = ttk.Button(new_collection_frame, text="Delete Collection", command=self.delete_collection)
+        delete_collection_button = ttk.Button(new_collection_frame, text="Delete Collection",
+                                              command=self.delete_collection)
         delete_collection_button.grid(row=2, column=0, columnspan=2, pady=5)
 
         # CRUD operations frame
@@ -236,6 +239,7 @@ class MongoDBApp:
         except Exception as e:
             self.log(f"Failed to upload file: {e}")
             messagebox.showerror("Error", f"Failed to upload file: {e}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
