@@ -101,38 +101,34 @@ def vector_search(collection_name, query, num_results=3):
     return results
 
 
-def print_product_search_result(result):
+def print_page_search_result(result):
     print(f"Similarity Score: {result['similarityScore']}")
-    print(f"Name: {result['document']['name']}")
-    print(f"Category: {result['document']['categoryName']}")
-    print(f"SKU: {result['document']['categoryName']}")
+    page_number = list(result['document'].keys())[0]
+    print(f"Page: {page_number}")
+    print(f"Content: {result['document'][page_number]}")
     print(f"_id: {result['document']['_id']}\n")
 
 
 # Retrieve and Generate (RAG) results
 system_prompt = """
-You are a helpful, fun and friendly sales assistant for Cosmic Works, a bicycle and bicycle accessories store. 
-Your name is Cosmo.
-You are designed to answer questions about the products that Cosmic Works sells.
+You are a helpful assistant designed to provide information about the Euvic Services presentation.
+Only answer questions related to the information provided in the presentation content below.
+If you are asked a question that is not in the presentation, respond with "I don't have that information in the presentation."
 
-Only answer questions related to the information provided in the list of products below that are represented
-in JSON format.
-
-If you are asked a question that is not in the list, respond with "I don't know."
-
-List of products:
+Presentation content:
 """
 
 
 def rag_with_vector_search(question: str, num_results: int = 3):
-    results = vector_search("products", question, num_results=num_results)
-    product_list = ""
+    results = vector_search("presentation", question, num_results=num_results)
+    presentation_content = ""
     for result in results:
         if "contentVector" in result["document"]:
             del result["document"]["contentVector"]
-        product_list += json.dumps(result["document"], indent=4, default=str) + "\n\n"
+        page_number = list(result["document"].keys())[0]
+        presentation_content += f"Page {page_number}: {result['document'][page_number]}\n\n"
 
-    formatted_prompt = system_prompt + product_list
+    formatted_prompt = system_prompt + presentation_content
 
     messages = [
         {"role": "system", "content": formatted_prompt},
@@ -154,27 +150,31 @@ if __name__ == "__main__":
 
     if client_org is not None:
         db = client_org[DB_NAME]
-        collection = db[COLLECTION_NAME]
+        collection = db["presentation"]  # Changed to "presentation"
 
-        # Load product data from the local JSON file
-        file_path = r'C:\Users\szyme\PycharmProjects\Azure-db-test2\json_embeddings_azure\test.json'
-        with open(file_path, 'r') as f:
+        # Load presentation data from the local JSON file
+        file_path = r'C:\Users\szyme\PycharmProjects\Azure-db-test2\json_embeddings_azure\output_test.json'  # Update this path to where your JSON file is located
+        with open(file_path, 'r', encoding='utf-8') as f:
             raw_data = json.load(f)
 
-        bulk_operations = [
-            UpdateOne(
-                {"_id": data["id"]},
-                {"$set": data},
-                upsert=True
-            ) for data in raw_data
-        ]
+        # Process and insert pages
+        bulk_operations = []
+        for page in raw_data["pages"]:
+            for page_number, content in page.items():
+                bulk_operations.append(
+                    UpdateOne(
+                        {"_id": page_number},
+                        {"$set": {page_number: content}},
+                        upsert=True
+                    )
+                )
 
         if bulk_operations:
             result = collection.bulk_write(bulk_operations)
             print(
                 f"Inserted: {result.upserted_count}, Matched: {result.matched_count}, Modified: {result.modified_count}")
         else:
-            print("No valid products to insert or update.")
+            print("No valid pages to insert or update.")
 
         # Establish Azure OpenAI connectivity
         ai_client = AzureOpenAI(
@@ -184,29 +184,25 @@ if __name__ == "__main__":
         )
 
         # Add vector fields to collections
-        add_collection_content_vector_field("products")
-        add_collection_content_vector_field("customers")
-        add_collection_content_vector_field("sales")
+        add_collection_content_vector_field("presentation")
 
         # Create vector indexes for collections
-        create_vector_index("products")
-        create_vector_index("customers")
-        create_vector_index("sales")
+        create_vector_index("presentation")
 
         # Example queries
-        query = "What bikes do you have?"
-        results = vector_search("products", query, num_results=4)
+        query = "What is Euvic Services?"
+        results = vector_search("presentation", query, num_results=3)
         for result in results:
-            print_product_search_result(result)
+            print_page_search_result(result)
 
-        query = "What do you have that is yellow?"
-        results = vector_search("products", query, num_results=4)
+        query = "What are the key values of collaboration with Euvic?"
+        results = vector_search("presentation", query, num_results=3)
         for result in results:
-            print_product_search_result(result)
+            print_page_search_result(result)
 
         # Example RAG usage
-        print(rag_with_vector_search("What bikes do you have?", 5))
-        print(rag_with_vector_search("What are the names and skus of yellow products?", 5))
+        print(rag_with_vector_search("What is WEBCON BPS?", 3))
+        print(rag_with_vector_search("What are the benefits for management according to the presentation?", 3))
 
         # Closing the MongoDB connection
         client_org.close()

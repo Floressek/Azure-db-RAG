@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     if client_org:
         db_name = DB_NAME  # replace with your actual database name
-        collection_name = COLLECTION_NAME   # replace with your actual collection name
+        collection_name = COLLECTION_NAME  # replace with your actual collection name
 
         collection_org = get_collection(client_org, db_name, collection_name)
 

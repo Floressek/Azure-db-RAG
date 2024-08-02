@@ -29,13 +29,13 @@ DB_NAME = os.environ.get("DB_NAME")
 COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
 EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
 
-
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 """
 This code here is a demo of how to use RAG-like capabilities to perform semantic search and generate responses based on data from DB.
 Based on ceratain changes it should perform better than the previous code because it uses indexing and search capabilities of MongoDB.
 """
+
 
 def log_time(operation_name, start_time, end_time):
     duration = end_time - start_time
@@ -117,7 +117,7 @@ def vector_search(collection, query_vector, top_k=5):
             {
                 "$project": {
                     "content": 1,
-                    "score": { "$meta": "searchScore" }
+                    "score": {"$meta": "searchScore"}
                 }
             }
         ]))
@@ -148,7 +148,7 @@ def semantic_search(collection, query_text, top_k=5):
             {
                 "$project": {
                     "content": 1,
-                    "score": { "$meta": "searchScore" }
+                    "score": {"$meta": "searchScore"}
                 }
             }
         ]))
@@ -174,7 +174,8 @@ def get_openai_response(query, search_results):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that provides coherent responses based on given search results."},
+                {"role": "system",
+                 "content": "You are a helpful assistant that provides coherent responses based on given search results."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -183,10 +184,12 @@ def get_openai_response(query, search_results):
         print(f"An error occurred while getting OpenAI response: {e}")
         return None
 
+
 def generate_query_vector(query_text):
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.embeddings.create(input=query_text, model="text-embedding-ada-002")
     return response.data[0].embedding
+
 
 def print_menu():
     print("\n--- Menu ---")
@@ -195,6 +198,7 @@ def print_menu():
     print("3. Get OpenAI response based on search results")
     print("4. Exit")
     return input("Enter your choice (1-4): ")
+
 
 def main():
     client = connect_to_cosmosdb(COSMOSDB_CONNECTION_STRING)
@@ -235,6 +239,7 @@ def main():
             print("Invalid choice. Please try again.")
 
     client.close()
+
 
 if __name__ == "__main__":
     main()

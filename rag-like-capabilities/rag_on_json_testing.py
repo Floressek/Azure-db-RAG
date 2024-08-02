@@ -29,12 +29,13 @@ DB_NAME = os.environ.get("DB_NAME")
 COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
 EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
 
-
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 """
 This code here is a demo of how to use RAG-like capabilities to perform semantic search and generate responses based on json files.
 """
+
+
 def log_time(operation_name, start_time, end_time):
     duration = end_time - start_time
     print(f"{operation_name} took {duration:.4f} seconds")

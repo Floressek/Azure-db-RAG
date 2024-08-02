@@ -8,6 +8,8 @@ load_dotenv()
 # Replace with your actual connection string
 CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
 DB_NAME = os.environ.get("COSMOS_DB_NAME")
+
+
 # COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
 
 

@@ -29,13 +29,14 @@ DB_NAME = os.environ.get("DB_NAME")
 COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
 EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
 
-
 # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 """
 This code here is a demo of how to use RAG-like capabilities to perform semantic search and generate responses based on data from DB. 
 But its biggest issue is that it is slow and inefficient due to loading all the documents from the collection and then performing the search.
 """
+
+
 def log_time(operation_name, start_time, end_time):
     duration = end_time - start_time
     print(f"{operation_name} took {duration:.4f} seconds")
@@ -79,6 +80,7 @@ def get_or_create_collection(client, db_name, collection_name):
 
 
 def load_embeddings(file_path):
+    start_time = time.time()
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
@@ -86,6 +88,9 @@ def load_embeddings(file_path):
     except Exception as e:
         print(f"Error loading embeddings file: {e}")
         return None
+    finally:
+        end_time = time.time()
+        log_time("Load Embeddings", start_time, end_time)
 
 
 def insert_documents(collection, documents):
@@ -137,6 +142,7 @@ def semantic_search(collection, query_text, top_k=5):
 
 
 def get_openai_response(query, search_results):
+    start_time = time.time()
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Prepare the prompt
@@ -149,7 +155,8 @@ def get_openai_response(query, search_results):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that provides coherent responses based on given search results."},
+                {"role": "system",
+                 "content": "You are a helpful assistant that provides coherent responses based on given search results."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -157,11 +164,24 @@ def get_openai_response(query, search_results):
     except Exception as e:
         print(f"An error occurred while getting OpenAI response: {e}")
         return None
+    finally:
+        end_time = time.time()
+        log_time("Get OpenAI Response", start_time, end_time)
+
 
 def generate_query_vector(query_text):
+    start_time = time.time()
     client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.embeddings.create(input=query_text, model="text-embedding-ada-002")
-    return response.data[0].embedding
+    try:
+        response = client.embeddings.create(input=query_text, model="text-embedding-ada-002")
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"An error occurred while generating query vector: {e}")
+        return None
+    finally:
+        end_time = time.time()
+        log_time("Generate Query Vector", start_time, end_time)
+
 
 def print_menu():
     print("\n--- Menu ---")
@@ -171,7 +191,9 @@ def print_menu():
     print("4. Exit")
     return input("Enter your choice (1-4): ")
 
+
 def main():
+    start_time = time.time()
     client = connect_to_cosmosdb(COSMOSDB_CONNECTION_STRING)
     if not client:
         return
@@ -210,6 +232,9 @@ def main():
             print("Invalid choice. Please try again.")
 
     client.close()
+    end_time = time.time()
+    log_time("Total Execution", start_time, end_time)
+
 
 if __name__ == "__main__":
     main()
