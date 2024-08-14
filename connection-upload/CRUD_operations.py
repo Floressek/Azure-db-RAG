@@ -153,6 +153,7 @@ if __name__ == "__main__":
         if collection_org is not None:
             # Insert a document
             embedding = np.random.rand(128).tolist()
+            # Here instead of dummy_doc you can pass the actual document you want to insert -> only for testing purposes bc we dont have embeddings using ada-002 here
             document = {"name": "John Doe", "age": 30, "city": "New York"}
             insert_document(collection_org, document)
 
