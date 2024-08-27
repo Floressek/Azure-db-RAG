@@ -121,7 +121,6 @@ def rag_with_vector_search(collection, question: str, num_results: int = 2):
         return "An error occurred while generating the response."
 
 
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
