@@ -7,19 +7,39 @@ from pptx import Presentation
 from docx import Document
 from PyPDF2 import PdfReader
 import openpyxl
-import pandas as pd
-import shutil
 import chardet
 import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
+import subprocess
 
 # Ensure you have Tesseract installed and set the path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Ustaw ścieżkę do Popplera względem katalogu projektu
-POPPLER_PATH = os.path.join(os.path.dirname(__file__), 'poppler', 'Library', 'bin')
-print(f"Ścieżka do Popplera: {POPPLER_PATH}")
+# POPPLER_PATH = os.path.join(os.path.dirname(__file__), 'poppler', 'Library', 'bin')
+PDFTOCAIRO_PATH = r'C:\Users\szyme\PycharmProjects\Azure-db-test2\poppler\Library\bin'
+print(f"Ścieżka do Popplera: {PDFTOCAIRO_PATH}")
+os.environ["PATH"] += os.pathsep + PDFTOCAIRO_PATH
+
+
+# def check_poppler_installation():
+#     pdftocairo_path = PDFTOCAIRO_PATH
+#     if os.path.exists(pdftocairo_path):
+#         # print(f"Znaleziono pdftocairo.exe: {pdftocairo_path}")
+#         return pdftocairo_path
+#     else:
+#         print("Nie znaleziono pdftocairo.exe")
+#         return None
+
+def check_poppler_installation():
+    pdftocairo_path = PDFTOCAIRO_PATH
+    if os.path.exists(os.path.join(pdftocairo_path, 'pdftocairo.exe')) and os.path.exists(
+            os.path.join(pdftocairo_path, 'pdfinfo.exe')):
+        return pdftocairo_path
+    else:
+        print("Poppler utilities (pdftocairo and pdfinfo) not found in the specified path.")
+        return None
 
 
 def parse_pptx(file_path):
@@ -33,11 +53,15 @@ def parse_pptx(file_path):
                     if hasattr(shape, 'text'):
                         slide_content.append(shape.text)
                     elif shape.shape_type == 13:  # 13 to wartość dla obrazów
-                        image = shape.image
-                        image_bytes = image.blob
-                        pil_image = Image.open(io.BytesIO(image_bytes))
-                        ocr_text = pytesseract.image_to_string(pil_image)
-                        slide_content.append(f"OCR text from image: {ocr_text}")
+                        try:
+                            image = shape.image
+                            image_bytes = image.blob
+                            pil_image = Image.open(io.BytesIO(image_bytes))
+                            ocr_text = pytesseract.image_to_string(pil_image)
+                            slide_content.append(f"OCR text from image: {ocr_text}")
+                        except Exception as img_error:
+                            print(f"Nie można przetworzyć obrazu na slajdzie {i}: {str(img_error)}")
+                            slide_content.append("[Nieobsługiwany format obrazu]")
                 except Exception as e:
                     print(f"Błąd podczas przetwarzania elementu na slajdzie {i}: {str(e)}")
             slides.append({f"Slajd {i}": slide_content})
@@ -53,23 +77,54 @@ def parse_doc(file_path):
     return {"paragraphs": paragraphs}
 
 
+# def parse_pdf(file_path):
+#     pdftocairo_path = check_poppler_installation()
+#     if not pdftocairo_path:
+#         return {"error": "Nie znaleziono wymaganego narzędzia pdftocairo.exe"}
+#
+#     reader = PdfReader(file_path)
+#     pages = []
+#     for i, page in enumerate(reader.pages, 1):
+#         text = page.extract_text()
+#         if not text.strip():  # Jeśli nie wyodrębniono tekstu, próbuj OCR
+#             try:
+#                 print(f"Próba konwersji strony {i} pliku PDF na obraz...")
+#                 images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=PDFTOCAIRO_PATH)
+#                 print(f"Konwersja udana. Liczba obrazów: {len(images)}")
+#                 for image in images:
+#                     text += pytesseract.image_to_string(image)
+#             except Exception as e:
+#                 print(f"Błąd podczas konwersji strony {i} pliku PDF na obraz: {str(e)}")
+#                 print(f"Typ wyjątku: {type(e).__name__}")
+#                 text += f"[Błąd OCR na stronie {i}]"
+#         pages.append({f"Strona {i}": text})
+#     return {"strony": pages}
+
 def parse_pdf(file_path):
+    poppler_path = check_poppler_installation()
+    if not poppler_path:
+        return {"error": "Poppler utilities not found."}
+
     reader = PdfReader(file_path)
     pages = []
     for i, page in enumerate(reader.pages, 1):
         text = page.extract_text()
-        if not text.strip():  # Jeśli nie wyodrębniono tekstu, próbuj OCR
+        if not text or not text.strip():  # If no text was extracted, try using OCR
             try:
-                print(f"Próba konwersji strony {i} pliku PDF na obraz...")
-                images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=POPPLER_PATH)
-                print(f"Konwersja udana. Liczba obrazów: {len(images)}")
+                print(f"Attempting to convert page {i} of the PDF to an image for OCR...")
+                images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=poppler_path)
+                print(f"Page {i} converted successfully to image(s).")
                 for image in images:
-                    text += pytesseract.image_to_string(image)
+                    ocr_text = pytesseract.image_to_string(image)
+                    text += ocr_text
             except Exception as e:
-                print(f"Błąd podczas konwersji strony {i} pliku PDF na obraz: {str(e)}")
-                text += f"[Błąd OCR na stronie {i}]"
-        pages.append({f"Strona {i}": text})
-    return {"strony": pages}
+                print(f"Error converting page {i} of PDF to image: {str(e)}")
+                text += f"[OCR error on page {i}]"
+        else:
+            print(f"Text extracted from page {i} successfully.")
+        pages.append({f"Page {i}": text})
+
+    return {"pages": pages}
 
 
 def parse_xml(file_path):
