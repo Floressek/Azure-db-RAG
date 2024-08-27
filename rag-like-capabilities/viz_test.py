@@ -1,7 +1,7 @@
 import os
 import time
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo import MongoClient, ASCENDING
+from pymongo.errors import ConnectionFailure, OperationFailure
 from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, wait_random_exponential, stop_after_attempt
@@ -43,6 +43,39 @@ def connect_to_cosmosdb(connection_string):
         return None
 
 
+index_name = "vector_index"
+
+
+def ensure_vector_search_index(collection):
+    try:
+        # Check if the index already exists
+        existing_indexes = collection.list_indexes()
+        if any(index["name"] == index_name for index in existing_indexes):
+            logging.info(f"Vector search index {index_name} already exists")
+            return
+
+        # Create an index on the vector field
+        collection.create_index([("vector", ASCENDING)], name=index_name)
+
+        # Wait for the index to be built
+        start_time = time.time()
+        while True:
+            if collection.index_information().get(index_name):
+                logging.info(f"Index {index_name} created successfully")
+                break
+            elif time.time() - start_time > 60:  # Timeout after 60 seconds
+                logging.error(f"Timeout waiting for index {index_name} to be created")
+                raise Exception(f"Failed to create index {index_name}")
+            time.sleep(5)  # Check every 5 seconds
+
+    except OperationFailure as e:
+        logging.error(f"Error creating vector search index: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Unexpected error during index creation: {e}")
+        raise
+
+
 @retry(wait=wait_random_exponential(min=1, max=20), stop=stop_after_attempt(3))
 def generate_embeddings(text: str):
     try:
@@ -59,21 +92,31 @@ def generate_embeddings(text: str):
 
 def vector_search(collection, query, num_results=2):
     query_embedding = generate_embeddings(query)
-    pipeline = [
-        {
-            '$search': {
-                "cosmosSearch": {
-                    "vector": query_embedding,
-                    "path": "contentVector",
-                    "k": num_results
-                },
-                "returnStoredSource": True
+    try:
+        pipeline = [
+            {
+                "$search": {
+                    "index": index_name,  # Explicitly specify the index name
+                    "knnBeta": {
+                        "vector": query_embedding,
+                        "path": "vector",
+                        "k": num_results
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "score": {"$meta": "searchScore"},
+                    "content": 1,
+                    "vector": 1
+                }
             }
-        },
-        {'$project': {'similarityScore': {'$meta': 'searchScore'}, 'document': '$$ROOT'}}
-    ]
-    results = collection.aggregate(pipeline)
-    return results
+        ]
+        results = list(collection.aggregate(pipeline))
+        return results
+    except OperationFailure as e:
+        logging.error(f"Vector search operation failed: {e}")
+        return []
 
 
 def print_page_search_result(result):
@@ -86,7 +129,8 @@ def print_page_search_result(result):
 
 # Creative prompt for the RAG-like model
 system_prompt = """
-You are a helpful assistant designed to provide information about the Euvic Services presentation.
+You are a helpful assistant designed to provide information about the Euvic Services presentations / pdf files
+.
 Try to answer questions based on the information provided in the presentation content below.
 If you are asked a question that isn't covered in the presentation, respond based on the given information and your best judgment.
 
@@ -94,19 +138,14 @@ Presentation content:
 """
 
 
-def rag_with_vector_search(collection, question: str, num_results: int = 2):
+def rag_with_vector_search(collection, question, num_results=2):
     results = vector_search(collection, question, num_results=num_results)
-    presentation_content = ""
+    context = ""
     for result in results:
-        if "contentVector" in result["document"]:
-            del result["document"]["contentVector"]
-        page_number = result["document"]["page_number"]
-        presentation_content += f"Page {page_number}: {result['document']['content']}\n\n"
-
-    formatted_prompt = system_prompt + presentation_content
+        context += result['content'] + "\n\n"
 
     messages = [
-        {"role": "system", "content": formatted_prompt},
+        {"role": "system", "content": system_prompt + context},
         {"role": "user", "content": question}
     ]
 
@@ -137,6 +176,7 @@ def index():
         if client_org is not None:
             db = client_org[DB_NAME]
             collection = db[COLLECTION_NAME]
+            ensure_vector_search_index(collection)  # Ensure the index exists
             try:
                 response = rag_with_vector_search(collection, question, num_results)
             except Exception as e:
