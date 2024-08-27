@@ -5,9 +5,18 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-# Replace with your actual connection string
-CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
-DB_NAME = os.environ.get("COSMOS_DB_NAME")
+# # Replace with your actual connection string
+# CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
+# DB_NAME = os.environ.get("COSMOS_DB_NAME")
+
+# Retrieve the connection string and database name from the environment
+CONNECTION_STRING = os.environ.get("COSMOSDB_CONNECTION_STRING")
+DB_NAME = os.environ.get("DB_NAME")
+
+# Test if the environment variables are loaded properly
+print(f"COSMOS_CONNECTION_STRING: {os.environ.get('COSMOSDB_CONNECTION_STRING')}")
+print(f"COSMOS_DB_NAME: {os.environ.get('DB_NAME')}")
+
 
 
 # COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
