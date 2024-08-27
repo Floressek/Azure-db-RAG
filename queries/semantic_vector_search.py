@@ -12,7 +12,8 @@ dotenv.load_dotenv()
 COSMOSDB_CONNECTION_STRING = os.getenv("COSMOSDB_CONNECTION_STRING")
 DB_NAME = os.environ.get("DB_NAME")
 COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
-EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
+# EMBEDDINGS_FILE = os.environ.get("EMBEDDINGS_FILE")
+EMBEDDINGS_FILE = r"C:\Users\szyme\PycharmProjects\Azure-db-test2\json_embeddings_azure\output_with_embeddings.json"
 
 
 def log_time(operation_name, start_time, end_time):
