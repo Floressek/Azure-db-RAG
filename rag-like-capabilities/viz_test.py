@@ -7,6 +7,8 @@ from openai import OpenAI
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 from flask import Flask, render_template, request, jsonify
 import logging
+from pprint import pformat
+from datetime import datetime
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -102,15 +104,51 @@ def vector_search(collection, query, num_results=2):
                 "$project": {
                     "similarityScore": {"$meta": "searchScore"},
                     "content": 1,
-                    "_id": 1
+                    "_id": 1,
+                    "title": 1,
+                    "pageNumber": 1,
+                    "createdAt": 1,
+                    "wordCount": {"$size": {"$split": ["$content", " "]}}
                 }
             }
         ])
-        return list(results)
+    #     return list(results)
+    # except Exception as e:
+    #     logging.error(f"Vector search operation failed: {e}")
+    #     return []
+
+        results_list = list(results)
+
+        # Logowanie wyników
+        logging.info(f"Vector search results for query: '{query}'")
+        for i, result in enumerate(results_list, 1):
+            logging.info(f"Result {i}:")
+            logging.info(f"Similarity Score: {result.get('similarityScore', 'N/A')}")
+            logging.info(f"Document ID: {result.get('_id', 'N/A')}")
+            logging.info(f"Title: {result.get('title', 'N/A')}")
+            logging.info(f"Page Number: {result.get('pageNumber', 'N/A')}")
+            logging.info(f"Content: {result.get('content', 'N/A')[:100]}...")  # Pokazujemy tylko pierwsze 100 znaków
+
+            # Formatowanie daty createdAt, jeśli istnieje
+            created_at = result.get('createdAt')
+            if created_at:
+                if isinstance(created_at, datetime):
+                    created_at_str = created_at.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    created_at_str = str(created_at)
+            else:
+                created_at_str = 'N/A'
+            logging.info(f"Created At: {created_at_str}")
+
+            logging.info(f"Word Count: {result.get('wordCount', 'N/A')}")
+            logging.info("Full result structure:")
+            logging.info(pformat(result))
+            logging.info("-" * 50)
+
+        return results_list
     except Exception as e:
         logging.error(f"Vector search operation failed: {e}")
         return []
-
 
 def print_page_search_result(result):
     logging.info(f"Similarity Score: {result['similarityScore']}")
@@ -135,8 +173,11 @@ def rag_with_vector_search(collection, question, num_results=2):
     results = vector_search(collection, question, num_results=num_results)
     context = ""
     for result in results:
-        context += result['content'] + "\n\n"
-
+        context += f"Title: {result.get('title', 'N/A')}\n"
+        context += f"Page: {result.get('pageNumber', 'N/A')}\n"
+        context += f"Content: {result.get('content', 'N/A')}\n"
+        context += f"Created At: {result.get('createdAt', 'N/A')}\n"
+        context += f"Word Count: {result.get('wordCount', 'N/A')}\n\n"
     messages = [
         {"role": "system", "content": system_prompt + context},
         {"role": "user", "content": question}
