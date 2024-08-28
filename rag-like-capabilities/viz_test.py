@@ -1,6 +1,6 @@
 import os
 import time
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -43,36 +43,27 @@ def connect_to_cosmosdb(connection_string):
         return None
 
 
-index_name = "vector_index"
-
-
 def ensure_vector_search_index(collection):
     try:
-        # Check if the index already exists
+        index_name = "vectorSearchIndex"
         existing_indexes = collection.list_indexes()
         if any(index["name"] == index_name for index in existing_indexes):
             logging.info(f"Vector search index {index_name} already exists")
             return
 
-        # Create an index on the vector field
-        collection.create_index([("vector", ASCENDING)], name=index_name)
-
-        # Wait for the index to be built
-        start_time = time.time()
-        while True:
-            if collection.index_information().get(index_name):
-                logging.info(f"Index {index_name} created successfully")
-                break
-            elif time.time() - start_time > 60:  # Timeout after 60 seconds
-                logging.error(f"Timeout waiting for index {index_name} to be created")
-                raise Exception(f"Failed to create index {index_name}")
-            time.sleep(5)  # Check every 5 seconds
-
-    except OperationFailure as e:
-        logging.error(f"Error creating vector search index: {e}")
-        raise
+        collection.create_index(
+            [("vector", "cosmosSearch")],
+            name=index_name,
+            cosmosSearchOptions={
+                "kind": "vector-ivf",
+                "numLists": 1,  # Dostosuj tę wartość w zależności od rozmiaru kolekcji
+                "similarity": "COS",
+                "dimensions": 1536  # Dostosuj do rzeczywistego rozmiaru wektorów
+            }
+        )
+        logging.info(f"Index {index_name} created successfully")
     except Exception as e:
-        logging.error(f"Unexpected error during index creation: {e}")
+        logging.error(f"Error creating vector search index: {e}")
         raise
 
 
@@ -93,11 +84,10 @@ def generate_embeddings(text: str):
 def vector_search(collection, query, num_results=2):
     query_embedding = generate_embeddings(query)
     try:
-        pipeline = [
+        results = collection.aggregate([
             {
                 "$search": {
-                    "index": index_name,  # Explicitly specify the index name
-                    "knnBeta": {
+                    "cosmosSearch": {
                         "vector": query_embedding,
                         "path": "vector",
                         "k": num_results
@@ -106,15 +96,14 @@ def vector_search(collection, query, num_results=2):
             },
             {
                 "$project": {
-                    "score": {"$meta": "searchScore"},
+                    "similarityScore": {"$meta": "searchScore"},
                     "content": 1,
-                    "vector": 1
+                    "_id": 1
                 }
             }
-        ]
-        results = list(collection.aggregate(pipeline))
-        return results
-    except OperationFailure as e:
+        ])
+        return list(results)
+    except Exception as e:
         logging.error(f"Vector search operation failed: {e}")
         return []
 
@@ -178,6 +167,10 @@ def index():
             collection = db[COLLECTION_NAME]
             ensure_vector_search_index(collection)  # Ensure the index exists
             try:
+                results = vector_search(collection, question, num_results)
+                for result in results:
+                    logging.info(f"Similarity Score: {result['similarityScore']}")
+                    logging.info(f"Content: {result['content']}")
                 response = rag_with_vector_search(collection, question, num_results)
             except Exception as e:
                 logging.error(f"Error processing query: {e}")
