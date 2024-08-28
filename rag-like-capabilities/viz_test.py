@@ -51,11 +51,15 @@ def ensure_vector_search_index(collection):
             logging.info(f"Vector search index {index_name} already exists")
             return
 
+# The numLists parameter determines the number of clusters to be created. A single cluster implies that the search is
+# conducted against all vectors in the database, akin to a brute-force or kNN search. This setting provides
+# the highest accuracy but also the highest latency.
+
         collection.create_index(
             [("vector", "cosmosSearch")],
             name=index_name,
             cosmosSearchOptions={
-                "kind": "vector-ivf",
+                "kind": "vector-ivf",  # HNSW is also supported but works from M40 tier
                 "numLists": 1,  # Dostosuj tę wartość w zależności od rozmiaru kolekcji
                 "similarity": "COS",
                 "dimensions": 1536  # Dostosuj do rzeczywistego rozmiaru wektorów

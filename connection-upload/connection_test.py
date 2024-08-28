@@ -18,7 +18,6 @@ print(f"COSMOS_CONNECTION_STRING: {os.environ.get('COSMOSDB_CONNECTION_STRING')}
 print(f"COSMOS_DB_NAME: {os.environ.get('DB_NAME')}")
 
 
-
 # COLLECTION_NAME = os.environ.get("COSMOS_COLLECTION_NAME")
 
 
