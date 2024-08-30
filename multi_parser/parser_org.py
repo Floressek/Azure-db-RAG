@@ -48,27 +48,63 @@ def parse_pptx(file_path):
         slides = []
         for i, slide in enumerate(presentation.slides, 1):
             slide_content = []
+
+            # Extract text from shapes
             for shape in slide.shapes:
-                try:
-                    if hasattr(shape, 'text'):
-                        slide_content.append(shape.text)
-                    elif shape.shape_type == 13:  # 13 to wartość dla obrazów
-                        try:
-                            image = shape.image
-                            image_bytes = image.blob
-                            pil_image = Image.open(io.BytesIO(image_bytes))
-                            ocr_text = pytesseract.image_to_string(pil_image)
+                if hasattr(shape, 'text') and shape.text.strip():
+                    slide_content.append(f"Shape text: {shape.text.strip()}")
+
+                # Perform OCR on images
+                if shape.shape_type == 13:  # 13 is the value for pictures
+                    try:
+                        image = shape.image
+                        image_bytes = image.blob
+                        pil_image = Image.open(io.BytesIO(image_bytes))
+                        ocr_text = pytesseract.image_to_string(pil_image).strip()
+                        if ocr_text:
                             slide_content.append(f"OCR text from image: {ocr_text}")
-                        except Exception as img_error:
-                            print(f"Nie można przetworzyć obrazu na slajdzie {i}: {str(img_error)}")
-                            slide_content.append("[Nieobsługiwany format obrazu]")
-                except Exception as e:
-                    print(f"Błąd podczas przetwarzania elementu na slajdzie {i}: {str(e)}")
-            slides.append({f"Slajd {i}": slide_content})
-        return {"slajdy": slides}
+                    except Exception as img_error:
+                        print(f"Cannot process image on slide {i}: {str(img_error)}")
+                        slide_content.append(f"[Unsupported image format on slide {i}]")
+
+            # If no content was extracted, add a note
+            if not slide_content:
+                slide_content.append("[No text or recognizable images found on this slide]")
+
+            slides.append({f"Slide {i}": slide_content})
+
+        return {"slides": slides}
     except Exception as e:
-        print(f"Błąd podczas przetwarzania pliku PPTX {file_path}: {str(e)}")
+        print(f"Error processing PPTX file {file_path}: {str(e)}")
         return {"error": str(e)}
+
+# def parse_pptx(file_path):
+#     try:
+#         presentation = Presentation(file_path)
+#         slides = []
+#         for i, slide in enumerate(presentation.slides, 1):
+#             slide_content = []
+#             for shape in slide.shapes:
+#                 try:
+#                     if hasattr(shape, 'text'):
+#                         slide_content.append(shape.text)
+#                     elif shape.shape_type == 13:  # 13 to wartość dla obrazów
+#                         try:
+#                             image = shape.image
+#                             image_bytes = image.blob
+#                             pil_image = Image.open(io.BytesIO(image_bytes))
+#                             ocr_text = pytesseract.image_to_string(pil_image)
+#                             slide_content.append(f"OCR text from image: {ocr_text}")
+#                         except Exception as img_error:
+#                             print(f"Nie można przetworzyć obrazu na slajdzie {i}: {str(img_error)}")
+#                             slide_content.append("[Nieobsługiwany format obrazu]")
+#                 except Exception as e:
+#                     print(f"Błąd podczas przetwarzania elementu na slajdzie {i}: {str(e)}")
+#             slides.append({f"Slajd {i}": slide_content})
+#         return {"slajdy": slides}
+#     except Exception as e:
+#         print(f"Błąd podczas przetwarzania pliku PPTX {file_path}: {str(e)}")
+#         return {"error": str(e)}
 
 
 def parse_doc(file_path):
@@ -76,29 +112,6 @@ def parse_doc(file_path):
     paragraphs = [paragraph.text for paragraph in document.paragraphs]
     return {"paragraphs": paragraphs}
 
-
-# def parse_pdf(file_path):
-#     pdftocairo_path = check_poppler_installation()
-#     if not pdftocairo_path:
-#         return {"error": "Nie znaleziono wymaganego narzędzia pdftocairo.exe"}
-#
-#     reader = PdfReader(file_path)
-#     pages = []
-#     for i, page in enumerate(reader.pages, 1):
-#         text = page.extract_text()
-#         if not text.strip():  # Jeśli nie wyodrębniono tekstu, próbuj OCR
-#             try:
-#                 print(f"Próba konwersji strony {i} pliku PDF na obraz...")
-#                 images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=PDFTOCAIRO_PATH)
-#                 print(f"Konwersja udana. Liczba obrazów: {len(images)}")
-#                 for image in images:
-#                     text += pytesseract.image_to_string(image)
-#             except Exception as e:
-#                 print(f"Błąd podczas konwersji strony {i} pliku PDF na obraz: {str(e)}")
-#                 print(f"Typ wyjątku: {type(e).__name__}")
-#                 text += f"[Błąd OCR na stronie {i}]"
-#         pages.append({f"Strona {i}": text})
-#     return {"strony": pages}
 
 def parse_pdf(file_path):
     poppler_path = check_poppler_installation()
@@ -108,21 +121,25 @@ def parse_pdf(file_path):
     reader = PdfReader(file_path)
     pages = []
     for i, page in enumerate(reader.pages, 1):
-        text = page.extract_text()
-        if not text or not text.strip():  # If no text was extracted, try using OCR
-            try:
-                print(f"Attempting to convert page {i} of the PDF to an image for OCR...")
-                images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=poppler_path)
-                print(f"Page {i} converted successfully to image(s).")
-                for image in images:
-                    ocr_text = pytesseract.image_to_string(image)
-                    text += ocr_text
-            except Exception as e:
-                print(f"Error converting page {i} of PDF to image: {str(e)}")
-                text += f"[OCR error on page {i}]"
-        else:
-            print(f"Text extracted from page {i} successfully.")
-        pages.append({f"Page {i}": text})
+        # Extract text using PyPDF2
+        extracted_text = page.extract_text()
+
+        # Always perform OCR, regardless of whether text was extracted
+        try:
+            print(f"Converting page {i} of the PDF to an image for OCR...")
+            images = convert_from_path(file_path, first_page=i, last_page=i, poppler_path=poppler_path)
+            print(f"Page {i} converted successfully to image(s).")
+            ocr_text = ""
+            for image in images:
+                ocr_text += pytesseract.image_to_string(image)
+
+            # Combine extracted text and OCR text
+            combined_text = f"Extracted text:\n{extracted_text}\n\nOCR text:\n{ocr_text}"
+        except Exception as e:
+            print(f"Error converting page {i} of PDF to image: {str(e)}")
+            combined_text = f"Extracted text:\n{extracted_text}\n\nOCR error on page {i}: {str(e)}"
+
+        pages.append({f"Page {i}": combined_text})
 
     return {"pages": pages}
 
