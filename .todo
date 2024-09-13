@@ -1,0 +1,6 @@
+1. Limit incoming HTTP requests handled at a time
+2. Handle other message types
+3. Add try-catch block for HTTP requests
+4. Delete unused main() function
+5. Adjust timeout times, number of connections per pool
+6. Add more pools - done
